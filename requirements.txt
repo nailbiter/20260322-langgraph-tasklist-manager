@@ -1,0 +1,22 @@
+# LangGraph Core & Checkpointing
+langgraph>=0.2.0
+langgraph-checkpoint-sqlite>=2.0.0
+
+# LangGraph IDE / Studio Support
+# The [inmem] extra is essential for the 'langgraph dev' command
+langgraph-cli[inmem]>=0.1.12
+
+# LLM Integration (Gemini)
+langchain-google-genai>=1.0.0
+langchain-core>=0.2.0
+
+# Database & Environment
+pymongo[srv]>=4.10.0
+python-dotenv>=1.0.1
+
+# GCP Cloud Run/Firestore Readiness
+google-cloud-firestore>=2.19.0
+langgraph-checkpoint-firestore>=0.1.7
+
+# Utilities
+pydantic>=2.7.0
