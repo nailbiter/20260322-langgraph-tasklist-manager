@@ -21,7 +21,12 @@ client = MongoClient(MONGO_URI)
 db = client.get_database("gstasks")
 tasks_col = db.get_collection("tasks")
 
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro")
+llm = ChatGoogleGenerativeAI(
+    # model="gemini-1.5-flash",
+    model="gemini-2.5-flash-lite",
+    temperature=0,
+    max_retries=2,
+)
 
 # --- Tool Definitions ---
 
@@ -33,7 +38,7 @@ def query_tasks(query_filter: dict):
     Use this for read-only operations like listing tasks.
     """
     try:
-        #FIXME: why limit 20 here?
+        # FIXME: why limit 20 here?
         results = list(tasks_col.find(query_filter).limit(20))
         for r in results:
             r["_id"] = str(r["_id"])
@@ -142,6 +147,17 @@ builder.add_edge("approval", "action")
 # After action, return to agent to explain the result
 builder.add_edge("action", "agent")
 
+compile_kwargs = {}
+
 # --- Persistence ---
-memory = SqliteSaver.from_conn_string(":memory:")
-graph = builder.compile(checkpointer=memory)
+if not os.getenv("IS_LANGGRAPH_DEV", "1") == "1":
+    from langgraph.checkpoint.memory import MemorySaver
+
+    # MemorySaver is the simplest in-memory checkpointer
+    # for local development and IDE testing.
+    memory = MemorySaver()
+    compile_kwargs["checkpointer"] = memory
+
+# Compile the graph
+# The 'checkpointer' enables persistent memory across turns
+graph = builder.compile(**compile_kwargs)

@@ -205,3 +205,28 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+### Emacs ###
+# Generic backup files
+*~
+
+# Auto-save files
+\#*\#
+
+# Interlock/Lock files (the ones that start with .#)
+.\#*
+
+# TRAMP files
+tramp
+.\#tramp.*
+
+# Compiled files
+*.elc
+
+# Directory-local variables
+.dir-locals.el
+
+# Network security files
+network-security.dotfiles
+
+## langgraph
+.langgraph_api/
