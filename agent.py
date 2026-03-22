@@ -1,16 +1,17 @@
 import os
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import SystemMessage
 from langchain_core.tools import tool
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.prebuilt import ToolNode
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.errors import GraphInterrupt
 from pymongo import MongoClient
+from bson import ObjectId
+import pandas as pd
 
 # Load environment variables
 load_dotenv()
@@ -20,29 +21,85 @@ MONGO_URI = os.getenv("MONGO_URI")
 client = MongoClient(MONGO_URI)
 db = client.get_database("gstasks")
 tasks_col = db.get_collection("tasks")
+tags_col = db.get_collection("tags")
 
 llm = ChatGoogleGenerativeAI(
-    # model="gemini-1.5-flash",
     model="gemini-2.5-flash-lite",
     temperature=0,
     max_retries=2,
 )
 
+# --- Helper Functions ---
+
+
+def get_tag_map():
+    """Maps UUID -> Name and Name -> UUID from the tags collection."""
+    tags = list(tags_col.find({}, {"uuid": 1, "name": 1}))
+    uuid_to_name = {t["uuid"]: t["name"] for t in tags}
+    name_to_uuid = {t["name"]: t["uuid"] for t in tags}
+    return uuid_to_name, name_to_uuid
+
+
+def normalize_date(date_val):
+    """Handles both BSON $date objects and ISO strings for readability."""
+    if isinstance(date_val, dict) and "$date" in date_val:
+        return date_val["$date"]
+    return str(date_val)
+
+
 # --- Tool Definitions ---
 
 
 @tool
-def query_tasks(query_filter: dict):
+def query_tasks(query_filter: dict, tag_name: Optional[str] = None, limit: int = 50):
     """
     Queries the MongoDB task database.
-    Use this for read-only operations like listing tasks.
+    - query_filter: standard MongoDB find dict.
+    - tag_name: if provided (e.g., 'candychore'), automatically finds the UUID.
+    - limit: defaults to 50.
     """
     try:
-        # FIXME: why limit 20 here?
-        results = list(tasks_col.find(query_filter).limit(20))
+        u_to_n, n_to_u = get_tag_map()
+
+        # --- AUTO-FIX: Date String to $date Object ---
+        # Detect if the LLM sent a string for scheduled_date and wrap it
+        if "scheduled_date" in query_filter:
+            dt_val = query_filter["scheduled_date"]
+            if isinstance(dt_val, str):
+                # Formats "YYYY-MM-DD" into the DB's expected ISO format
+                query_filter["scheduled_date"] = {"$date": pd.to_datetime(dt_val)}
+            elif isinstance(dt_val, dict) and "$date" not in dt_val:
+                # Handles operators like {"$gte": "2026-03-23"}
+                for op, val in dt_val.items():
+                    if isinstance(val, str):
+                        query_filter["scheduled_date"][op] = pd.to_datetime(val)
+
+        # Resolve tag_name to UUID if provided
+        if tag_name and tag_name in n_to_u:
+            query_filter["tags"] = n_to_u[tag_name]
+
+        results = list(tasks_col.find(query_filter).limit(limit))
+
+        readable_results = []
         for r in results:
-            r["_id"] = str(r["_id"])
-        return results if results else "No tasks found."
+            # Resolve tag UUIDs to human names for the LLM context
+            resolved_tags = [
+                u_to_n.get(tag_uuid, tag_uuid) for tag_uuid in r.get("tags", [])
+            ]
+
+            readable_results.append(
+                {
+                    "_id": str(r["_id"]),
+                    "name": r.get("name"),
+                    "status": r.get("status"),
+                    "scheduled": normalize_date(r.get("scheduled_date")),
+                    "tags": resolved_tags,
+                    "comment": r.get("comment"),
+                    "uuid": r.get("uuid"),  # keeping original uuid for reference
+                }
+            )
+
+        return readable_results if readable_results else "No tasks found."
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -50,17 +107,22 @@ def query_tasks(query_filter: dict):
 @tool
 def modify_task(task_id: str, updates: dict):
     """
-    Updates an existing task in MongoDB.
-    Requires human approval before execution.
+    Updates an existing task in MongoDB by its _id (string).
+    Handles date formatting for 'scheduled_date' automatically.
     """
     try:
-        from bson import ObjectId
+        # Normalize date if the LLM sends a simple string
+        if "scheduled_date" in updates and isinstance(updates["scheduled_date"], str):
+            # Maintain consistency with your EJSON format
+            updates["scheduled_date"] = {
+                "$date": f"{updates['scheduled_date']}T00:00:00.000Z"
+            }
 
         result = tasks_col.update_one({"_id": ObjectId(task_id)}, {"$set": updates})
         return (
             f"Update successful for {task_id}."
             if result.modified_count > 0
-            else "No changes made."
+            else "No changes made (task not found or data identical)."
         )
     except Exception as e:
         return f"Error: {str(e)}"
@@ -74,12 +136,15 @@ tool_node = ToolNode(tools)
 
 def call_model(state: MessagesState):
     """Standard node to get model response."""
-    # Inject current time so the agent understands 'today' or 'next week'
     current_time = datetime.now().strftime("%A, %B %d, %Y")
-    system_prompt = f"You are a task assistant. Current date: {current_time}."
+    system_prompt = (
+        f"You are Alex's task assistant. Current date: {current_time}. "
+        "When Alex asks for tasks by tag (e.g., 'chores', 'niw', 'candychore'), "
+        "pass that tag string into the 'tag_name' parameter of query_tasks. "
+        "Always refer to tasks by their _id when modifying them."
+    )
 
     model_with_tools = llm.bind_tools(tools)
-    # Prefixing messages with system context
     response = model_with_tools.invoke(
         [{"role": "system", "content": system_prompt}] + state["messages"]
     )
@@ -87,18 +152,13 @@ def call_model(state: MessagesState):
 
 
 def human_approval_node(state: MessagesState):
-    """
-    This node only triggers for 'modify_task'.
-    In LangGraph Studio, it creates a 'Breakpoint'.
-    """
     last_message = state["messages"][-1]
-
-    # We double-check here just to be safe, though the edge handles routing
-    for tool_call in last_message.tool_calls:
-        if tool_call["name"] == "modify_task":
-            # The IDE will catch this and wait for user 'Resume'
-            raise GraphInterrupt(f"CRITICAL: Approve modification? {tool_call['args']}")
-
+    if hasattr(last_message, "tool_calls"):
+        for tool_call in last_message.tool_calls:
+            if tool_call["name"] == "modify_task":
+                raise GraphInterrupt(
+                    f"CRITICAL: Approve modification? {tool_call['args']}"
+                )
     return state
 
 
@@ -106,45 +166,32 @@ def human_approval_node(state: MessagesState):
 
 
 def should_continue(state: MessagesState) -> Literal["action", "approval", "__end__"]:
-    """
-    Determines the next step based on the tool being called.
-    """
     messages = state["messages"]
     last_message = messages[-1]
 
     if not last_message.tool_calls:
         return END
 
-    # Logic: If ANY call is a modification, we must go to approval
-    for tool_call in last_message.tool_calls:
-        if tool_call["name"] == "modify_task":
-            return "approval"
+    if any(tc["name"] == "modify_task" for tc in last_message.tool_calls):
+        return "approval"
 
-    # If it's just 'query_tasks' (or any other read-only tool), go straight to action
     return "action"
 
 
 # --- Graph Construction ---
 
 builder = StateGraph(MessagesState)
-
 builder.add_node("agent", call_model)
 builder.add_node("action", tool_node)
 builder.add_node("approval", human_approval_node)
 
 builder.add_edge(START, "agent")
-
-# Route based on tool type
 builder.add_conditional_edges(
     "agent",
     should_continue,
     {"action": "action", "approval": "approval", "__end__": END},
 )
-
-# After approval, proceed to action
 builder.add_edge("approval", "action")
-
-# After action, return to agent to explain the result
 builder.add_edge("action", "agent")
 
 compile_kwargs = {}
@@ -153,11 +200,7 @@ compile_kwargs = {}
 if not os.getenv("IS_LANGGRAPH_DEV", "1") == "1":
     from langgraph.checkpoint.memory import MemorySaver
 
-    # MemorySaver is the simplest in-memory checkpointer
-    # for local development and IDE testing.
     memory = MemorySaver()
     compile_kwargs["checkpointer"] = memory
 
-# Compile the graph
-# The 'checkpointer' enables persistent memory across turns
 graph = builder.compile(**compile_kwargs)
