@@ -10,35 +10,18 @@ from langchain_core.tools import tool
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
-from pymongo import MongoClient
+
+from common.db_interaction import (
+    fetch_mongo_tasks, 
+    insert_task, 
+    update_task_by_uuid
+)
 
 load_dotenv()
 
-# --- 0. Load Prompt Template & Mongo ---
+# --- 0. Load Prompt Template ---
 with open("system_prompt.template.md", "r") as f:
     PROMPT_TEMPLATE = Template(f.read())
-
-MONGO_URI = os.getenv("MONGO_URI")
-client = MongoClient(MONGO_URI)
-db = client.get_database("gstasks")
-tasks_col = db.get_collection("tasks")
-
-def fetch_mongo_tasks(limit=20):
-    """Fetches and normalizes tasks from MongoDB for the demo state."""
-    raw_tasks = list(tasks_col.find().sort("_id", -1).limit(limit))
-    normalized = []
-    for t in raw_tasks:
-        task_uuid = t.get("uuid") or str(t["_id"])
-        normalized.append({
-            "uuid": task_uuid,
-            "name": t.get("name", "Untitled Task"),
-            "status": t.get("status", "OPEN"),
-            "scheduled_date": t.get("scheduled_date"),
-            "URL": t.get("URL"),
-            "tags": t.get("tags", []),
-            "comment": t.get("comment")
-        })
-    return normalized
 
 # --- 1. State Schema (Aligned with Mongo Export) ---
 
@@ -84,8 +67,8 @@ def add_task(name: str, scheduled_date: Optional[str] = None, url: Optional[str]
         "due": None,
         "status": "OPEN"
     }
-    # Persist to MongoDB
-    tasks_col.insert_one(new_task.copy())
+    # Persist to MongoDB using common helper
+    insert_task(new_task.copy())
     return new_task
 
 @tool
@@ -97,7 +80,8 @@ def update_task(task_uuid: str, updates: dict):
     if "scheduled_date" in updates and isinstance(updates["scheduled_date"], str):
         updates["scheduled_date"] = {"$date": f"{updates['scheduled_date']}T00:00:00.000Z"}
     
-    tasks_col.update_one({"uuid": task_uuid}, {"$set": updates})
+    # Persist to MongoDB using common helper
+    update_task_by_uuid(task_uuid, updates)
     updates["uuid"] = task_uuid
     return updates
 
@@ -156,8 +140,13 @@ builder.add_conditional_edges(
 )
 builder.add_edge("action", "agent")
 
-checkpointer = MemorySaver()
-graph = builder.compile(
-    checkpointer=checkpointer,
-    interrupt_before=["action"]
-)
+compile_kwargs = {
+    "interrupt_before": ["action"]
+}
+
+# Only add a custom checkpointer if NOT running in LangGraph Studio/CLI environment
+if not os.getenv("IS_LANGGRAPH_DEV", "1") == "1":
+    checkpointer = MemorySaver()
+    compile_kwargs["checkpointer"] = checkpointer
+
+graph = builder.compile(**compile_kwargs)

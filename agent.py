@@ -9,43 +9,24 @@ from langchain_core.tools import tool
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.prebuilt import ToolNode
 from langgraph.errors import GraphInterrupt
-from pymongo import MongoClient
-from bson import ObjectId
 import pandas as pd
+
+from common.db_interaction import (
+    get_tag_map, 
+    normalize_date, 
+    find_tasks, 
+    update_task_by_id
+)
 
 # Load environment variables
 load_dotenv()
 
 # --- Configuration & Clients ---
-MONGO_URI = os.getenv("MONGO_URI")
-client = MongoClient(MONGO_URI)
-db = client.get_database("gstasks")
-tasks_col = db.get_collection("tasks")
-tags_col = db.get_collection("tags")
-
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash-lite",
     temperature=0,
     max_retries=2,
 )
-
-# --- Helper Functions ---
-
-
-def get_tag_map():
-    """Maps UUID -> Name and Name -> UUID from the tags collection."""
-    tags = list(tags_col.find({}, {"uuid": 1, "name": 1}))
-    uuid_to_name = {t["uuid"]: t["name"] for t in tags}
-    name_to_uuid = {t["name"]: t["uuid"] for t in tags}
-    return uuid_to_name, name_to_uuid
-
-
-def normalize_date(date_val):
-    """Handles both BSON $date objects and ISO strings for readability."""
-    if isinstance(date_val, dict) and "$date" in date_val:
-        return date_val["$date"]
-    return str(date_val)
-
 
 # --- Tool Definitions ---
 
@@ -62,14 +43,11 @@ def query_tasks(query_filter: dict, tag_name: Optional[str] = None, limit: int =
         u_to_n, n_to_u = get_tag_map()
 
         # --- AUTO-FIX: Date String to $date Object ---
-        # Detect if the LLM sent a string for scheduled_date and wrap it
         if "scheduled_date" in query_filter:
             dt_val = query_filter["scheduled_date"]
             if isinstance(dt_val, str):
-                # Formats "YYYY-MM-DD" into the DB's expected ISO format
                 query_filter["scheduled_date"] = {"$date": pd.to_datetime(dt_val)}
             elif isinstance(dt_val, dict) and "$date" not in dt_val:
-                # Handles operators like {"$gte": "2026-03-23"}
                 for op, val in dt_val.items():
                     if isinstance(val, str):
                         query_filter["scheduled_date"][op] = pd.to_datetime(val)
@@ -78,11 +56,10 @@ def query_tasks(query_filter: dict, tag_name: Optional[str] = None, limit: int =
         if tag_name and tag_name in n_to_u:
             query_filter["tags"] = n_to_u[tag_name]
 
-        results = list(tasks_col.find(query_filter).limit(limit))
+        results = find_tasks(query_filter, limit)
 
         readable_results = []
         for r in results:
-            # Resolve tag UUIDs to human names for the LLM context
             resolved_tags = [
                 u_to_n.get(tag_uuid, tag_uuid) for tag_uuid in r.get("tags", [])
             ]
@@ -95,7 +72,7 @@ def query_tasks(query_filter: dict, tag_name: Optional[str] = None, limit: int =
                     "scheduled": normalize_date(r.get("scheduled_date")),
                     "tags": resolved_tags,
                     "comment": r.get("comment"),
-                    "uuid": r.get("uuid"),  # keeping original uuid for reference
+                    "uuid": r.get("uuid"),
                 }
             )
 
@@ -111,14 +88,12 @@ def modify_task(task_id: str, updates: dict):
     Handles date formatting for 'scheduled_date' automatically.
     """
     try:
-        # Normalize date if the LLM sends a simple string
         if "scheduled_date" in updates and isinstance(updates["scheduled_date"], str):
-            # Maintain consistency with your EJSON format
             updates["scheduled_date"] = {
                 "$date": f"{updates['scheduled_date']}T00:00:00.000Z"
             }
 
-        result = tasks_col.update_one({"_id": ObjectId(task_id)}, {"$set": updates})
+        result = update_task_by_id(task_id, updates)
         return (
             f"Update successful for {task_id}."
             if result.modified_count > 0
