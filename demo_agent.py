@@ -30,26 +30,32 @@ class Task(TypedDict, total=False):
     uuid: str
     name: str
     status: Optional[str]
-    scheduled_date: Optional[dict]
+    scheduled_date: Optional[Union[dict, str]]
     URL: Optional[str]
     tags: List[str]
     due: Optional[str]
     comment: Optional[Any]
 
 def merge_tasks(existing: List[Task], updates: List[Task]) -> List[Task]:
-    if not existing:
-        existing = []
-    
-    task_map = {t["uuid"]: t for t in existing}
+    """
+    Pure reducer for 'tasks'. Ensures no mutation and stable sorting.
+    """
+    # Create a fresh map from existing tasks
+    task_map = {t["uuid"]: dict(t) for t in (existing or [])}
     
     for ut in updates:
         if "uuid" in ut:
-            if ut["uuid"] in task_map:
-                task_map[ut["uuid"]].update(ut)
+            tid = ut["uuid"]
+            if tid in task_map:
+                task_map[tid].update(ut)
             else:
-                task_map[ut["uuid"]] = ut
+                task_map[tid] = dict(ut)
     
-    return list(task_map.values())
+    # Sort deterministically by date so the LLM prompt is stable
+    return sorted(
+        task_map.values(), 
+        key=lambda x: str(x.get("scheduled_date") or "9999-99-99")
+    )
 
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
@@ -121,7 +127,6 @@ def agent_node(state: AgentState):
         available_tags=available_tags
     )
     
-    # Use SystemMessage for core rules and current state
     messages = [SystemMessage(content=system_prompt_content)] + state["messages"]
     response = model_with_tools.invoke(messages)
     return {"messages": [response], "tasks": tasks}
@@ -135,6 +140,7 @@ def action_node(state: AgentState):
         tool_name = tool_call["name"]
         args = tool_call["args"]
 
+        res = None
         if tool_name == "add_task":
             res = add_task.invoke(args)
             task_updates.append(res)
@@ -146,7 +152,7 @@ def action_node(state: AgentState):
             task_updates.extend(res)
         
         tool_messages.append(ToolMessage(
-            content=f"DB Operation Success: {tool_name}",
+            content=f"Confirmed updated state: {res}",
             tool_call_id=tool_call["id"]
         ))
     

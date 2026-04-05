@@ -32,11 +32,15 @@ def get_tag_map() -> (dict, dict):
     return uuid_to_name, name_to_uuid
 
 
-def normalize_date(date_val):
+def normalize_date(date_val) -> str:
     """Handles both BSON $date objects and ISO strings for readability."""
+    _logger = logger.getChild("normalize_date")
     if isinstance(date_val, dict) and "$date" in date_val:
-        return date_val["$date"]
-    return str(date_val)
+        res = date_val["$date"]
+    else:
+        res = str(date_val)
+    _logger.debug(dict(x=date_val, y=res))
+    return res
 
 
 def fetch_mongo_tasks(limit=100):
@@ -73,7 +77,7 @@ def fetch_mongo_tasks(limit=100):
                 "uuid": task_uuid,
                 "name": t.get("name", "Untitled Task"),
                 "status": t.get("status", "OPEN"),
-                "scheduled_date": t.get("scheduled_date"),
+                "scheduled_date": normalize_date(t.get("scheduled_date")),
                 "URL": t.get("URL"),
                 "tags": resolved_tags,
                 "comment": t.get("comment"),
@@ -100,9 +104,14 @@ def insert_task(task_data: dict):
 
 def update_task_by_uuid(task_uuid: str, updates: dict):
     """Updates a task in MongoDB by its custom 'uuid' field, mapping tag names back to UUIDs."""
+    _logger = logger.getChild("fetch_mongo_tasks")
     if "tags" in updates:
         updates["tags"] = _resolve_tags(updates["tags"])
-
+    if "scheduled_date" in updates:
+        updates["scheduled_date"] = pd.to_datetime(
+            normalize_date(updates["scheduled_date"])
+        )
+    _logger.debug(dict(task_uuid=task_uuid, updates=updates))
     return tasks_col.update_one({"uuid": task_uuid}, {"$set": updates})
 
 
