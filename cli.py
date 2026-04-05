@@ -24,7 +24,22 @@ def run_agent_turn(graph, config, message=None):
     # Check for interrupts (Human-in-the-loop)
     snapshot = graph.get_state(config)
     while snapshot.next:
-        click.echo(f"\n[!] INTERRUPT: Agent is about to execute: {snapshot.next}")
+        # Try to extract tool call details from the last message
+        details = ""
+        if "messages" in snapshot.values:
+            last_msg = snapshot.values["messages"][-1]
+            if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                for tc in last_msg.tool_calls:
+                    name = tc["name"]
+                    args = tc["args"]
+                    if name == "update_task":
+                        details += f"\n  - UPDATE task {args.get('task_uuid')} with {args.get('updates')}"
+                    elif name == "add_task":
+                        details += f"\n  - ADD task '{args.get('name')}' for {args.get('scheduled_date')}"
+                    else:
+                        details += f"\n  - {name}: {args}"
+
+        click.echo(f"\n[!] INTERRUPT: Agent is about to execute: {snapshot.next}{details}")
         if click.confirm("Do you want to proceed?"):
             for event in graph.stream(None, config, stream_mode="values"):
                 pass
