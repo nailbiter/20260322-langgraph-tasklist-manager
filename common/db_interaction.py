@@ -14,7 +14,7 @@ load_dotenv()
 _log_file = os.path.join(
     ".logs", f"db_interaction-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log.txt"
 )
-logger = get_configured_logger("db_interaction", log_to_file=_log_file)
+logger = get_configured_logger("db_interaction", log_to_file=_log_file, level="WARNING")
 
 # --- Configuration & Clients ---
 MONGO_URI = os.getenv("MONGO_URI")

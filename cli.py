@@ -1,19 +1,44 @@
 import os
 import uuid
 import click
+import readline  # Added for interactive history support
 from langgraph.checkpoint.sqlite import SqliteSaver
-from demo_agent import builder  # Importing builder for decoupling
+from demo_agent import builder
 
 # --- Configuration ---
 DB_PATH = "state.sqlite"
 
 def get_graph(checkpointer):
-    """
-    Re-compiles the graph with our persistent checkpointer.
-    This allows the CLI to control persistence independently of the agent definition.
-    """
-    # We use the same interrupt logic as the original demo_agent
+    """Re-compiles the graph with our persistent checkpointer."""
     return builder.compile(checkpointer=checkpointer, interrupt_before=["action"])
+
+def run_agent_turn(graph, config, message=None):
+    """Executes a single turn of the agent, handling interrupts."""
+    input_data = {"messages": [("user", message)]} if message else None
+    
+    # Execution loop
+    for event in graph.stream(input_data, config, stream_mode="values"):
+        # We can add streaming logic here if needed
+        pass
+
+    # Check for interrupts (Human-in-the-loop)
+    snapshot = graph.get_state(config)
+    while snapshot.next:
+        click.echo(f"\n[!] INTERRUPT: Agent is about to execute: {snapshot.next}")
+        if click.confirm("Do you want to proceed?"):
+            for event in graph.stream(None, config, stream_mode="values"):
+                pass
+            snapshot = graph.get_state(config) # Check if there's another interrupt
+        else:
+            click.echo("[*] Action cancelled/paused.")
+            break
+
+    # Final output display
+    final_state = graph.get_state(config)
+    if final_state.values and "messages" in final_state.values:
+        last_msg = final_state.values["messages"][-1]
+        if last_msg.type == "ai":
+            click.echo(f"\nAssistant: {last_msg.content}")
 
 @click.command()
 @click.argument('message', required=False)
@@ -22,8 +47,6 @@ def get_graph(checkpointer):
 def main(message, session_id, list_sessions):
     """CLI Wrapper for the Task Management Agent."""
     
-    # Initialize SQLite checkpointer
-    # Using a context manager for the checkpointer connection
     with SqliteSaver.from_conn_string(DB_PATH) as checkpointer:
         graph = get_graph(checkpointer)
         
@@ -40,62 +63,33 @@ def main(message, session_id, list_sessions):
                     for t in threads:
                         click.echo(f" - {t[0]}")
             except sqlite3.OperationalError:
-                # Table doesn't exist yet
                 click.echo(" (No sessions found - database not yet initialized)")
             return
 
-        if not message and not session_id:
-            click.echo("Error: Please provide a message or use --resume <id>.")
-            return
-
         # Handle Session ID logic
-        is_new = False
-        if session_id:
-            thread_id = session_id
-            click.echo(f"[*] Resuming session: {thread_id}")
-        else:
-            thread_id = str(uuid.uuid4())
-            is_new = True
-            click.echo(f"[*] Starting new session: {thread_id}")
-
+        thread_id = session_id if session_id else str(uuid.uuid4())
+        click.echo(f"[*] Session ID: {thread_id}")
         config = {"configurable": {"thread_id": thread_id}}
 
-        # If resuming without a message, we might be triggering an interrupt
-        input_data = None
         if message:
-            input_data = {"messages": [("user", message)]}
-        
-        # Execution loop to handle interrupts (Human-in-the-loop)
-        # We use stream to see what's happening
-        for event in graph.stream(input_data, config, stream_mode="values"):
-            if "messages" in event:
-                last_msg = event["messages"][-1]
-                # Only print assistant/tool messages, or everything if it's the final output
-                if hasattr(last_msg, "content") and last_msg.content:
-                    # We avoid re-printing the user message we just sent if it's the first step
-                    if not (is_new and last_msg == event["messages"][0] and message):
-                        pass 
-
-        # Check for interrupts
-        snapshot = graph.get_state(config)
-        if snapshot.next:
-            click.echo("\n[!] INTERRUPT: The agent is about to execute a database modification.")
-            click.echo(f"Pending actions: {snapshot.next}")
-            if click.confirm("Do you want to proceed?"):
-                # Proceed by passing None as input to the next node
-                for event in graph.stream(None, config, stream_mode="values"):
-                    pass
-                click.echo("[*] Actions executed.")
-            else:
-                click.echo(f"[*] Action paused. You can resume this session later with: --resume {thread_id}")
-                return
-
-        # Final output display
-        final_state = graph.get_state(config)
-        if final_state.values and "messages" in final_state.values:
-            last_msg = final_state.values["messages"][-1]
-            if last_msg.type == "ai":
-                click.echo(f"\nAssistant: {last_msg.content}")
+            # Single-shot mode
+            run_agent_turn(graph, config, message)
+        else:
+            # Interactive REPL mode
+            click.echo("[*] Entering interactive mode. Type 'exit' or 'quit' to stop.")
+            while True:
+                try:
+                    user_input = input(f"({thread_id[:8]}) > ").strip()
+                    if user_input.lower() in ["exit", "quit"]:
+                        break
+                    if not user_input:
+                        continue
+                    run_agent_turn(graph, config, user_input)
+                except EOFError:
+                    break
+                except KeyboardInterrupt:
+                    click.echo("\nInterrupted by user.")
+                    break
 
 if __name__ == "__main__":
     main()
