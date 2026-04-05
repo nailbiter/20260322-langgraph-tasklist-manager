@@ -230,3 +230,4 @@ network-security.dotfiles
 
 ## langgraph
 .langgraph_api/
+uv.lock
