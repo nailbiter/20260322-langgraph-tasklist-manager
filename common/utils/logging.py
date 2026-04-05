@@ -30,8 +30,8 @@ def get_configured_logger(
     level: typing.Literal["DEBUG", "INFO", "WARNING"] = "DEBUG",
     log_format=make_log_format(
         [
-            "name",
             "levelname",
+            "name",
             "asctime",
             "message",
         ]

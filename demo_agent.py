@@ -5,7 +5,7 @@ from typing import Annotated, TypedDict, Literal, List, Optional, Any, Union
 from string import Template
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage, SystemMessage
 from langchain_core.tools import tool
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -40,8 +40,6 @@ def merge_tasks(existing: List[Task], updates: List[Task]) -> List[Task]:
     if not existing:
         existing = []
     
-    # Check if this is a full sync (list of tasks instead of specific updates)
-    # If the LLM didn't provide a uuid in an update, it might be a raw list from sync_from_db
     task_map = {t["uuid"]: t for t in existing}
     
     for ut in updates:
@@ -50,10 +48,7 @@ def merge_tasks(existing: List[Task], updates: List[Task]) -> List[Task]:
                 task_map[ut["uuid"]].update(ut)
             else:
                 task_map[ut["uuid"]] = ut
-        else:
-            # Fallback if uuid is missing in the object (e.g., raw mongo return)
-            pass
-            
+    
     return list(task_map.values())
 
 class AgentState(TypedDict):
@@ -78,7 +73,6 @@ def add_task(name: str, scheduled_date: Optional[str] = None, url: Optional[str]
         "due": None,
         "status": "OPEN"
     }
-    # Persist to MongoDB using common helper (handles tag mapping)
     insert_task(new_task.copy())
     return new_task
 
@@ -91,7 +85,6 @@ def update_task(task_uuid: str, updates: dict):
     if "scheduled_date" in updates and isinstance(updates["scheduled_date"], str):
         updates["scheduled_date"] = {"$date": f"{updates['scheduled_date']}T00:00:00.000Z"}
     
-    # Persist to MongoDB using common helper (handles tag mapping)
     update_task_by_uuid(task_uuid, updates)
     updates["uuid"] = task_uuid
     return updates
@@ -122,13 +115,14 @@ def agent_node(state: AgentState):
     model_with_tools = llm.bind_tools(tools)
     
     current_time = datetime.now().strftime("%A, %B %d, %Y")
-    system_prompt = PROMPT_TEMPLATE.substitute(
+    system_prompt_content = PROMPT_TEMPLATE.substitute(
         current_time=current_time,
         tasks=tasks,
         available_tags=available_tags
     )
     
-    messages = [HumanMessage(content=system_prompt)] + state["messages"]
+    # Use SystemMessage for core rules and current state
+    messages = [SystemMessage(content=system_prompt_content)] + state["messages"]
     response = model_with_tools.invoke(messages)
     return {"messages": [response], "tasks": tasks}
 
@@ -160,17 +154,21 @@ def action_node(state: AgentState):
 
 # --- 4. Logic & Graph Construction ---
 
-def should_continue(state: AgentState) -> Literal["action", "__end__"]:
-    """Explicit router for the graph visualization."""
+def should_continue(state: AgentState) -> Literal["action", "read_action", "__end__"]:
     messages = state["messages"]
     last_message = messages[-1]
-    if last_message.tool_calls:
+    if not last_message.tool_calls:
+        return END
+    
+    if any(tc["name"] in ["add_task", "update_task"] for tc in last_message.tool_calls):
         return "action"
-    return END
+    
+    return "read_action"
 
 builder = StateGraph(AgentState)
 builder.add_node("agent", agent_node)
 builder.add_node("action", action_node)
+builder.add_node("read_action", action_node)
 
 builder.add_edge(START, "agent")
 builder.add_conditional_edges(
@@ -178,10 +176,12 @@ builder.add_conditional_edges(
     should_continue,
     {
         "action": "action",
+        "read_action": "read_action",
         "__end__": END
     }
 )
 builder.add_edge("action", "agent")
+builder.add_edge("read_action", "agent")
 
 compile_kwargs = {
     "interrupt_before": ["action"]

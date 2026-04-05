@@ -18,7 +18,7 @@ logger = get_configured_logger("db_interaction", log_to_file=_log_file)
 
 # --- Configuration & Clients ---
 MONGO_URI = os.getenv("MONGO_URI")
-client = MongoClient(MONGO_URI)
+client = MongoClient(MONGO_URI, tlsAllowInvalidCertificates=True)
 db = client.get_database("gstasks")
 tasks_col = db.get_collection("tasks")
 tags_col = db.get_collection("tags")
@@ -48,9 +48,9 @@ def fetch_mongo_tasks(limit=100):
             {
                 "$and": [
                     {"scheduled_date": {"$gte": datetime(2026, 2, 7)}},
-                    {"state": {"$ne": "DONE"}},
-                    {"state": {"$ne": "FAILED"}},
-                    {"state": {"$ne": "CANCELLED"}},
+                    {"status": {"$ne": "DONE"}},
+                    {"status": {"$ne": "FAILED"}},
+                    {"status": {"$ne": "CANCELLED"}},
                 ]
             }
         )

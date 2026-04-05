@@ -16,6 +16,7 @@ dependencies = [
     "langgraph-checkpoint-firestore>=0.1.7",
     "pydantic>=2.7.0",
     "pandas>=2.2.0",
+    "click>=8.3.2",
 ]
 
 [tool.black]
@@ -24,3 +25,8 @@ dependencies = [
 # https://black.readthedocs.io/en/stable/guides/using_black_with_other_tools.html
 [tool.isort]
 profile = "black"
+
+[dependency-groups]
+dev = [
+    "langsmith>=0.7.25",
+]

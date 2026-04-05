@@ -231,3 +231,4 @@ network-security.dotfiles
 ## langgraph
 .langgraph_api/
 uv.lock
+conversation.json
