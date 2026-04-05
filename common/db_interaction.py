@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, date
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from pymongo import MongoClient
 from bson import ObjectId
 import pandas as pd
@@ -34,13 +34,41 @@ def get_tag_map() -> (dict, dict):
 
 def normalize_date(date_val) -> str:
     """Handles both BSON $date objects and ISO strings for readability."""
+    dt = None
     _logger = logger.getChild("normalize_date")
     if isinstance(date_val, dict) and "$date" in date_val:
-        res = date_val["$date"]
+        dt = pd.to_datetime(date_val["$date"])
+    elif date_val:
+        dt = pd.to_datetime(date_val)
+
+    if dt is not None:
+        res = dt.strftime("%Y-%m-%d (%a)")
     else:
         res = str(date_val)
     _logger.debug(dict(x=date_val, y=res))
     return res
+
+
+def parse_date_flexible(date_val):
+    """
+    Parses dates, specifically handling 'YYYY-MM-DD (%a)' format
+    before falling back to general pandas parsing.
+    """
+    _logger = logger.getChild("parse_date_flexible")
+    if isinstance(date_val, (datetime, date)):
+        return pd.to_datetime(date_val)
+
+    if isinstance(date_val, str):
+        try:
+            # Try specific format: 2026-04-04 (Sat)
+            return datetime.strptime(date_val, "%Y-%m-%d (%a)")
+        except ValueError:
+            # Fallback to general purpose pandas parser
+            try:
+                return pd.to_datetime(date_val)
+            except:
+                return None
+    return None
 
 
 def fetch_mongo_tasks(limit=100):
@@ -64,10 +92,7 @@ def fetch_mongo_tasks(limit=100):
     _logger.debug(f"downloaded {len(raw_tasks)} tasks")
     normalized = []
     for t in raw_tasks:
-        # Ensure every task has a uuid (fallback to stringified _id)
         task_uuid = t.get("uuid") or str(t["_id"])
-
-        # Resolve tag UUIDs to names for the LLM/Studio context
         resolved_tags = [
             u_to_n.get(tag_uuid, tag_uuid) for tag_uuid in t.get("tags", [])
         ]
@@ -83,7 +108,6 @@ def fetch_mongo_tasks(limit=100):
                 "comment": t.get("comment"),
             }
         )
-    _logger.debug(f"normalized: {normalized}")
     return normalized
 
 
@@ -96,30 +120,21 @@ def _resolve_tags(tags: List[str]) -> List[str]:
 
 
 def insert_task(task_data: dict):
-    """Inserts a new task into MongoDB, resolving tag names to UUIDs."""
+    """Inserts a new task into MongoDB, resolving tag names and dates."""
     if "tags" in task_data:
         task_data["tags"] = _resolve_tags(task_data["tags"])
+    if "scheduled_date" in task_data:
+        task_data["scheduled_date"] = parse_date_flexible(task_data["scheduled_date"])
     return tasks_col.insert_one(task_data)
 
 
 def update_task_by_uuid(task_uuid: str, updates: dict):
-    """Updates a task in MongoDB by its custom 'uuid' field, mapping tag names back to UUIDs."""
-    _logger = logger.getChild("fetch_mongo_tasks")
+    """Updates a task in MongoDB by custom uuid, resolving tags and dates."""
+    _logger = logger.getChild("update_task_by_uuid")
     if "tags" in updates:
         updates["tags"] = _resolve_tags(updates["tags"])
     if "scheduled_date" in updates:
-        updates["scheduled_date"] = pd.to_datetime(
-            normalize_date(updates["scheduled_date"])
-        )
+        updates["scheduled_date"] = parse_date_flexible(updates["scheduled_date"])
+
     _logger.debug(dict(task_uuid=task_uuid, updates=updates))
     return tasks_col.update_one({"uuid": task_uuid}, {"$set": updates})
-
-
-# def update_task_by_id(task_id: str, updates: dict):
-#     """Updates a task in MongoDB by its BSON '_id'."""
-#     return tasks_col.update_one({"_id": ObjectId(task_id)}, {"$set": updates})
-
-
-# def find_tasks(query_filter: dict, limit: int = 50):
-#     """Generic find wrapper for tasks."""
-#     return list(tasks_col.find(query_filter).limit(limit))
