@@ -55,6 +55,7 @@ def parse_date_flexible(date_val):
     before falling back to general pandas parsing.
     """
     _logger = logger.getChild("parse_date_flexible")
+    _logger.debug(dict(date_val=date_val))
     if isinstance(date_val, (datetime, date)):
         return pd.to_datetime(date_val)
 
@@ -71,10 +72,12 @@ def parse_date_flexible(date_val):
     return None
 
 
-def fetch_mongo_tasks(limit=100):
+def fetch_mongo_tasks(limit=150):
     _logger = logger.getChild("fetch_mongo_tasks")
     """Fetches and normalizes tasks from MongoDB for the demo state."""
     u_to_n, _ = get_tag_map()
+
+    # We sort by scheduled_date to ensure the most relevant (current/upcoming) tasks are included
     raw_tasks = list(
         tasks_col.find(
             {
@@ -86,7 +89,7 @@ def fetch_mongo_tasks(limit=100):
                 ]
             }
         )
-        .sort("_id", -1)
+        .sort("scheduled_date", 1)
         .limit(limit)
     )
     _logger.debug(f"downloaded {len(raw_tasks)} tasks")
@@ -101,7 +104,7 @@ def fetch_mongo_tasks(limit=100):
             {
                 "uuid": task_uuid,
                 "name": t.get("name", "Untitled Task"),
-                "status": t.get("status", "OPEN"),
+                "status": t.get("status") or "OPEN",
                 "scheduled_date": normalize_date(t.get("scheduled_date")),
                 "URL": t.get("URL"),
                 "tags": resolved_tags,
@@ -131,10 +134,11 @@ def insert_task(task_data: dict):
 def update_task_by_uuid(task_uuid: str, updates: dict):
     """Updates a task in MongoDB by custom uuid, resolving tags and dates."""
     _logger = logger.getChild("update_task_by_uuid")
+    _logger.debug(dict(task_uuid=task_uuid, updates=updates))
     if "tags" in updates:
         updates["tags"] = _resolve_tags(updates["tags"])
     if "scheduled_date" in updates:
         updates["scheduled_date"] = parse_date_flexible(updates["scheduled_date"])
-
     _logger.debug(dict(task_uuid=task_uuid, updates=updates))
+
     return tasks_col.update_one({"uuid": task_uuid}, {"$set": updates})

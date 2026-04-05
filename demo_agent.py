@@ -109,10 +109,8 @@ def update_task(task_uuid: str, updates: dict):
     Updates a task in MongoDB by UUID.
     Can update 'name', 'status' (DONE, CANCELLED, etc.), 'scheduled_date' (YYYY-MM-DD), 'tags', or 'comment'.
     """
-    if "scheduled_date" in updates and isinstance(updates["scheduled_date"], str):
-        updates["scheduled_date"] = {
-            "$date": f"{updates['scheduled_date']}T00:00:00.000Z"
-        }
+    # if "scheduled_date" in updates and isinstance(updates["scheduled_date"], str):
+    #     updates["scheduled_date"] = parse_date_flexible(updates["scheduled_date"])
 
     update_task_by_uuid(task_uuid, updates)
     updates["uuid"] = task_uuid
