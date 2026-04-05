@@ -14,7 +14,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from common.db_interaction import (
     fetch_mongo_tasks, 
     insert_task, 
-    update_task_by_uuid
+    update_task_by_uuid,
+    get_tag_map
 )
 
 load_dotenv()
@@ -38,12 +39,21 @@ class Task(TypedDict, total=False):
 def merge_tasks(existing: List[Task], updates: List[Task]) -> List[Task]:
     if not existing:
         existing = []
+    
+    # Check if this is a full sync (list of tasks instead of specific updates)
+    # If the LLM didn't provide a uuid in an update, it might be a raw list from sync_from_db
     task_map = {t["uuid"]: t for t in existing}
+    
     for ut in updates:
-        if ut["uuid"] in task_map:
-            task_map[ut["uuid"]].update(ut)
+        if "uuid" in ut:
+            if ut["uuid"] in task_map:
+                task_map[ut["uuid"]].update(ut)
+            else:
+                task_map[ut["uuid"]] = ut
         else:
-            task_map[ut["uuid"]] = ut
+            # Fallback if uuid is missing in the object (e.g., raw mongo return)
+            pass
+            
     return list(task_map.values())
 
 class AgentState(TypedDict):
@@ -53,21 +63,22 @@ class AgentState(TypedDict):
 # --- 2. Tool Definitions ---
 
 @tool
-def add_task(name: str, scheduled_date: Optional[str] = None, url: Optional[str] = None):
+def add_task(name: str, scheduled_date: Optional[str] = None, url: Optional[str] = None, tags: Optional[List[str]] = None):
     """
     Creates a new task in MongoDB. 
     scheduled_date should be 'YYYY-MM-DD'.
+    tags should be a list of human-readable tag names.
     """
     new_task: Task = {
         "uuid": str(uuid.uuid4()),
         "name": name,
         "URL": url,
-        "tags": [],
+        "tags": tags or [],
         "scheduled_date": {"$date": f"{scheduled_date}T00:00:00.000Z"} if scheduled_date else None,
         "due": None,
         "status": "OPEN"
     }
-    # Persist to MongoDB using common helper
+    # Persist to MongoDB using common helper (handles tag mapping)
     insert_task(new_task.copy())
     return new_task
 
@@ -75,17 +86,27 @@ def add_task(name: str, scheduled_date: Optional[str] = None, url: Optional[str]
 def update_task(task_uuid: str, updates: dict):
     """
     Updates a task in MongoDB by UUID. 
-    Can update 'name', 'status' (DONE, CANCELLED, etc.), 'scheduled_date' (YYYY-MM-DD), or 'comment'.
+    Can update 'name', 'status' (DONE, CANCELLED, etc.), 'scheduled_date' (YYYY-MM-DD), 'tags', or 'comment'.
     """
     if "scheduled_date" in updates and isinstance(updates["scheduled_date"], str):
         updates["scheduled_date"] = {"$date": f"{updates['scheduled_date']}T00:00:00.000Z"}
     
-    # Persist to MongoDB using common helper
+    # Persist to MongoDB using common helper (handles tag mapping)
     update_task_by_uuid(task_uuid, updates)
     updates["uuid"] = task_uuid
     return updates
 
-tools = [add_task, update_task]
+@tool
+def sync_from_db():
+    """
+    Fetches the absolute latest tasks from the database.
+    Use this if the user mentions they've updated tasks elsewhere
+    or if you need to ensure the most current data before a complex operation.
+    """
+    latest_tasks = fetch_mongo_tasks(limit=100)
+    return latest_tasks
+
+tools = [add_task, update_task, sync_from_db]
 
 # --- 3. Nodes ---
 
@@ -94,13 +115,17 @@ def agent_node(state: AgentState):
     if not tasks:
         tasks = fetch_mongo_tasks()
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
+    u_to_n, _ = get_tag_map()
+    available_tags = list(u_to_n.values())
+
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0)
     model_with_tools = llm.bind_tools(tools)
     
     current_time = datetime.now().strftime("%A, %B %d, %Y")
     system_prompt = PROMPT_TEMPLATE.substitute(
         current_time=current_time,
-        tasks=tasks
+        tasks=tasks,
+        available_tags=available_tags
     )
     
     messages = [HumanMessage(content=system_prompt)] + state["messages"]
@@ -113,21 +138,35 @@ def action_node(state: AgentState):
     task_updates = []
     
     for tool_call in last_message.tool_calls:
-        if tool_call["name"] == "add_task":
-            res = add_task.invoke(tool_call["args"])
+        tool_name = tool_call["name"]
+        args = tool_call["args"]
+
+        if tool_name == "add_task":
+            res = add_task.invoke(args)
             task_updates.append(res)
-        elif tool_call["name"] == "update_task":
-            res = update_task.invoke(tool_call["args"])
+        elif tool_name == "update_task":
+            res = update_task.invoke(args)
             task_updates.append(res)
+        elif tool_name == "sync_from_db":
+            res = sync_from_db.invoke({})
+            task_updates.extend(res)
         
         tool_messages.append(ToolMessage(
-            content=f"DB Operation Success: {tool_call['args']}",
+            content=f"DB Operation Success: {tool_name}",
             tool_call_id=tool_call["id"]
         ))
     
     return {"messages": tool_messages, "tasks": task_updates}
 
 # --- 4. Logic & Graph Construction ---
+
+def should_continue(state: AgentState) -> Literal["action", "__end__"]:
+    """Explicit router for the graph visualization."""
+    messages = state["messages"]
+    last_message = messages[-1]
+    if last_message.tool_calls:
+        return "action"
+    return END
 
 builder = StateGraph(AgentState)
 builder.add_node("agent", agent_node)
@@ -136,7 +175,11 @@ builder.add_node("action", action_node)
 builder.add_edge(START, "agent")
 builder.add_conditional_edges(
     "agent", 
-    lambda s: "action" if s["messages"][-1].tool_calls else END
+    should_continue,
+    {
+        "action": "action",
+        "__end__": END
+    }
 )
 builder.add_edge("action", "agent")
 
@@ -144,7 +187,6 @@ compile_kwargs = {
     "interrupt_before": ["action"]
 }
 
-# Only add a custom checkpointer if NOT running in LangGraph Studio/CLI environment
 if not os.getenv("IS_LANGGRAPH_DEV", "1") == "1":
     checkpointer = MemorySaver()
     compile_kwargs["checkpointer"] = checkpointer

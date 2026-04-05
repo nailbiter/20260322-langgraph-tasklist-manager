@@ -1,7 +1,6 @@
 {
   "dependencies": ["."],
   "graphs": {
-    "task_manager": "./agent.py:graph",
     "demo": "./demo_agent.py:graph"
   },
   "env": ".env"

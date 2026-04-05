@@ -1,12 +1,20 @@
 import os
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from pymongo import MongoClient
 from bson import ObjectId
 import pandas as pd
 from dotenv import load_dotenv
 
+from common.utils.logging import get_configured_logger
+
 load_dotenv()
+
+# --- Logging ---
+_log_file = os.path.join(
+    ".logs", f"db_interaction-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log.txt"
+)
+logger = get_configured_logger("db_interaction", log_to_file=_log_file)
 
 # --- Configuration & Clients ---
 MONGO_URI = os.getenv("MONGO_URI")
@@ -32,9 +40,24 @@ def normalize_date(date_val):
 
 
 def fetch_mongo_tasks(limit=100):
+    _logger = logger.getChild("fetch_mongo_tasks")
     """Fetches and normalizes tasks from MongoDB for the demo state."""
     u_to_n, _ = get_tag_map()
-    raw_tasks = list(tasks_col.find().sort("_id", -1).limit(limit))
+    raw_tasks = list(
+        tasks_col.find(
+            {
+                "$and": [
+                    {"scheduled_date": {"$gte": datetime(2026, 2, 7)}},
+                    {"state": {"$ne": "DONE"}},
+                    {"state": {"$ne": "FAILED"}},
+                    {"state": {"$ne": "CANCELLED"}},
+                ]
+            }
+        )
+        .sort("_id", -1)
+        .limit(limit)
+    )
+    _logger.debug(f"downloaded {len(raw_tasks)} tasks")
     normalized = []
     for t in raw_tasks:
         # Ensure every task has a uuid (fallback to stringified _id)
@@ -56,20 +79,29 @@ def fetch_mongo_tasks(limit=100):
                 "comment": t.get("comment"),
             }
         )
+    _logger.debug(f"normalized: {normalized}")
     return normalized
 
 
+def _resolve_tags(tags: List[str]) -> List[str]:
+    """Helper to map human-readable names back to UUIDs."""
+    if not tags:
+        return []
+    _, n_to_u = get_tag_map()
+    return [n_to_u.get(tag, tag) for tag in tags]
+
+
 def insert_task(task_data: dict):
-    """Inserts a new task into MongoDB."""
+    """Inserts a new task into MongoDB, resolving tag names to UUIDs."""
+    if "tags" in task_data:
+        task_data["tags"] = _resolve_tags(task_data["tags"])
     return tasks_col.insert_one(task_data)
 
 
 def update_task_by_uuid(task_uuid: str, updates: dict):
     """Updates a task in MongoDB by its custom 'uuid' field, mapping tag names back to UUIDs."""
-    if "tags" in updates and isinstance(updates["tags"], list):
-        _, n_to_u = get_tag_map()
-        # Map names back to UUIDs, keeping the value as-is if no mapping exists
-        updates["tags"] = [n_to_u.get(tag, tag) for tag in updates["tags"]]
+    if "tags" in updates:
+        updates["tags"] = _resolve_tags(updates["tags"])
 
     return tasks_col.update_one({"uuid": task_uuid}, {"$set": updates})
 

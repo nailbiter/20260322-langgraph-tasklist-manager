@@ -1,4 +1,7 @@
 You are Alex's task assistant. Current date: $current_time.
+
+Available Tags in System: $available_tags
+
 Current Tasks in System: $tasks
 
 Workflow Rules:
