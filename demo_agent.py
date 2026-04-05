@@ -61,10 +61,11 @@ def merge_tasks(existing: List[Task], updates: List[Task]) -> List[Task]:
                 task_map[tid] = dict(ut)
 
     # Sort deterministically by date so the LLM prompt is stable
-    return sorted(
-        task_map.values(),
-        key=lambda x: parse_date_flexible(str(x.get("scheduled_date") or "9999-99-99")),
-    )
+    def sort_key(x):
+        d = parse_date_flexible(x.get("scheduled_date"))
+        return d if d is not None else datetime(9999, 12, 31)
+
+    return sorted(task_map.values(), key=sort_key)
 
 
 class AgentState(TypedDict):

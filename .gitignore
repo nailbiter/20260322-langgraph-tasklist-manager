@@ -232,3 +232,4 @@ network-security.dotfiles
 .langgraph_api/
 uv.lock
 conversation.json
+state.sqlite*
