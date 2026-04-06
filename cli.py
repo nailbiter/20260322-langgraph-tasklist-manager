@@ -8,14 +8,16 @@ from demo_agent import builder
 # --- Configuration ---
 DB_PATH = "state.sqlite"
 
+
 def get_graph(checkpointer):
     """Re-compiles the graph with our persistent checkpointer."""
     return builder.compile(checkpointer=checkpointer, interrupt_before=["action"])
 
+
 def run_agent_turn(graph, config, message=None):
     """Executes a single turn of the agent, handling interrupts."""
     input_data = {"messages": [("user", message)]} if message else None
-    
+
     # Execution loop
     for event in graph.stream(input_data, config, stream_mode="values"):
         # We can add streaming logic here if needed
@@ -24,26 +26,11 @@ def run_agent_turn(graph, config, message=None):
     # Check for interrupts (Human-in-the-loop)
     snapshot = graph.get_state(config)
     while snapshot.next:
-        # Try to extract tool call details from the last message
-        details = ""
-        if "messages" in snapshot.values:
-            last_msg = snapshot.values["messages"][-1]
-            if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
-                for tc in last_msg.tool_calls:
-                    name = tc["name"]
-                    args = tc["args"]
-                    if name == "update_task":
-                        details += f"\n  - UPDATE task {args.get('task_uuid')} with {args.get('updates')}"
-                    elif name == "add_task":
-                        details += f"\n  - ADD task '{args.get('name')}' for {args.get('scheduled_date')}"
-                    else:
-                        details += f"\n  - {name}: {args}"
-
-        click.echo(f"\n[!] INTERRUPT: Agent is about to execute: {snapshot.next}{details}")
+        click.echo(f"\n[!] INTERRUPT: Agent is about to execute: {snapshot.next}")
         if click.confirm("Do you want to proceed?"):
             for event in graph.stream(None, config, stream_mode="values"):
                 pass
-            snapshot = graph.get_state(config) # Check if there's another interrupt
+            snapshot = graph.get_state(config)  # Check if there's another interrupt
         else:
             click.echo("[*] Action cancelled/paused.")
             break
@@ -55,19 +42,21 @@ def run_agent_turn(graph, config, message=None):
         if last_msg.type == "ai":
             click.echo(f"\nAssistant: {last_msg.content}")
 
+
 @click.command()
-@click.argument('message', required=False)
-@click.option('--resume', 'session_id', help='Resume a session with the given ID.')
-@click.option('--list-sessions', is_flag=True, help='List existing session IDs.')
+@click.argument("message", required=False)
+@click.option("--resume", "session_id", help="Resume a session with the given ID.")
+@click.option("--list-sessions", is_flag=True, help="List existing session IDs.")
 def main(message, session_id, list_sessions):
     """CLI Wrapper for the Task Management Agent."""
-    
+
     with SqliteSaver.from_conn_string(DB_PATH) as checkpointer:
         graph = get_graph(checkpointer)
-        
+
         if list_sessions:
             click.echo("Existing sessions (thread_ids) in state.sqlite:")
             import sqlite3
+
             try:
                 with sqlite3.connect(DB_PATH) as conn:
                     cursor = conn.cursor()
@@ -106,5 +95,7 @@ def main(message, session_id, list_sessions):
                     click.echo("\nInterrupted by user.")
                     break
 
+
 if __name__ == "__main__":
     main()
+a
