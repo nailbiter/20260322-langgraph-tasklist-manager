@@ -2,7 +2,8 @@
   "dependencies": ["."],
   "graphs": {
     "demo": "./demo_agent.py:graph",
-    "rag": "./rag_agent.py:graph"
+    "rag": "./rag_agent.py:graph",
+    "bq_rag": "./bq_rag_agent.py:graph"
   },
   "env": ".env"
 }

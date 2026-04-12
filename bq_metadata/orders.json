@@ -1,0 +1,76 @@
+{
+  "kind": "bigquery#table",
+  "etag": "iHRdtOU/aa2AVIohDxqrnw==",
+  "id": "bigquery-public-data:thelook_ecommerce.orders",
+  "selfLink": "https://bigquery.googleapis.com/bigquery/v2/projects/bigquery-public-data/datasets/thelook_ecommerce/tables/orders",
+  "tableReference": {
+    "projectId": "bigquery-public-data",
+    "datasetId": "thelook_ecommerce",
+    "tableId": "orders"
+  },
+  "description": "Programatically generated orders for The Look fictitious e-commerce store",
+  "schema": {
+    "fields": [
+      {
+        "name": "order_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "status",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "gender",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "returned_at",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "shipped_at",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "delivered_at",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "num_of_item",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "numBytes": "6748307",
+  "numLongTermBytes": "0",
+  "numRows": "124808",
+  "creationTime": "1645833123322",
+  "lastModifiedTime": "1775962705462",
+  "type": "TABLE",
+  "location": "US",
+  "numTimeTravelPhysicalBytes": "15514952",
+  "numTotalLogicalBytes": "6748307",
+  "numActiveLogicalBytes": "6748307",
+  "numLongTermLogicalBytes": "0",
+  "numTotalPhysicalBytes": "17727881",
+  "numActivePhysicalBytes": "17727881",
+  "numLongTermPhysicalBytes": "0",
+  "numCurrentPhysicalBytes": "2212929"
+}

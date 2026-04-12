@@ -1,0 +1,76 @@
+{
+  "kind": "bigquery#table",
+  "etag": "L2AiRhCR2dY5DBRp0qJ+2g==",
+  "id": "bigquery-public-data:thelook_ecommerce.products",
+  "selfLink": "https://bigquery.googleapis.com/bigquery/v2/projects/bigquery-public-data/datasets/thelook_ecommerce/tables/products",
+  "tableReference": {
+    "projectId": "bigquery-public-data",
+    "datasetId": "thelook_ecommerce",
+    "tableId": "products"
+  },
+  "description": "The Look fictitious e-commerce dataset - products table",
+  "schema": {
+    "fields": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "cost",
+        "type": "FLOAT",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "category",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "name",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "brand",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "retail_price",
+        "type": "FLOAT",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "department",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "sku",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "distribution_center_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "numBytes": "4285975",
+  "numLongTermBytes": "0",
+  "numRows": "29120",
+  "creationTime": "1645833123321",
+  "lastModifiedTime": "1775962704627",
+  "type": "TABLE",
+  "location": "US",
+  "numTimeTravelPhysicalBytes": "9322768",
+  "numTotalLogicalBytes": "4285975",
+  "numActiveLogicalBytes": "4285975",
+  "numLongTermLogicalBytes": "0",
+  "numTotalPhysicalBytes": "10654592",
+  "numActivePhysicalBytes": "10654592",
+  "numLongTermPhysicalBytes": "0",
+  "numCurrentPhysicalBytes": "1331824"
+}

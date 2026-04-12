@@ -1,0 +1,91 @@
+{
+  "kind": "bigquery#table",
+  "etag": "AKDtJmZ3xH8er4dS57fwOQ==",
+  "id": "bigquery-public-data:thelook_ecommerce.inventory_items",
+  "selfLink": "https://bigquery.googleapis.com/bigquery/v2/projects/bigquery-public-data/datasets/thelook_ecommerce/tables/inventory_items",
+  "tableReference": {
+    "projectId": "bigquery-public-data",
+    "datasetId": "thelook_ecommerce",
+    "tableId": "inventory_items"
+  },
+  "description": "Programatically generated inventory for The Look fictitious e-commerce store",
+  "schema": {
+    "fields": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "product_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "sold_at",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "cost",
+        "type": "FLOAT",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "product_category",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "product_name",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "product_brand",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "product_retail_price",
+        "type": "FLOAT",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "product_department",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "product_sku",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "product_distribution_center_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "numBytes": "81045385",
+  "numLongTermBytes": "0",
+  "numRows": "488629",
+  "creationTime": "1645833123287",
+  "lastModifiedTime": "1775962709077",
+  "type": "TABLE",
+  "location": "US",
+  "numTimeTravelPhysicalBytes": "53387007",
+  "numTotalLogicalBytes": "81045385",
+  "numActiveLogicalBytes": "81045385",
+  "numLongTermLogicalBytes": "0",
+  "numTotalPhysicalBytes": "61004408",
+  "numActivePhysicalBytes": "61004408",
+  "numLongTermPhysicalBytes": "0",
+  "numCurrentPhysicalBytes": "7617401"
+}
