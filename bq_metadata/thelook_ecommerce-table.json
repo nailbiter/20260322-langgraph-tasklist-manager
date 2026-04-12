@@ -1,0 +1,27 @@
+{
+  "kind": "bigquery#table",
+  "etag": "nZngU+HFnRKLcYQ6itudew==",
+  "id": "bigquery-public-data:thelook_ecommerce.thelook_ecommerce-table",
+  "selfLink": "https://bigquery.googleapis.com/bigquery/v2/projects/bigquery-public-data/datasets/thelook_ecommerce/tables/thelook_ecommerce-table",
+  "tableReference": {
+    "projectId": "bigquery-public-data",
+    "datasetId": "thelook_ecommerce",
+    "tableId": "thelook_ecommerce-table"
+  },
+  "schema": {},
+  "numBytes": "0",
+  "numLongTermBytes": "0",
+  "numRows": "0",
+  "creationTime": "1752710489215",
+  "lastModifiedTime": "1775743378710",
+  "type": "TABLE",
+  "location": "US",
+  "numTimeTravelPhysicalBytes": "0",
+  "numTotalLogicalBytes": "0",
+  "numActiveLogicalBytes": "0",
+  "numLongTermLogicalBytes": "0",
+  "numTotalPhysicalBytes": "0",
+  "numActivePhysicalBytes": "0",
+  "numLongTermPhysicalBytes": "0",
+  "numCurrentPhysicalBytes": "0"
+}

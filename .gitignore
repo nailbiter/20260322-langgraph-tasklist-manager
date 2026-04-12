@@ -233,3 +233,4 @@ network-security.dotfiles
 uv.lock
 conversation.json
 state.sqlite*
+.DS_Store

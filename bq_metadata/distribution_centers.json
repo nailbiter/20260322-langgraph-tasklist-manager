@@ -1,0 +1,55 @@
+{
+  "kind": "bigquery#table",
+  "etag": "rrI9zbrKdN8yBE3S8Z16Tg==",
+  "id": "bigquery-public-data:thelook_ecommerce.distribution_centers",
+  "selfLink": "https://bigquery.googleapis.com/bigquery/v2/projects/bigquery-public-data/datasets/thelook_ecommerce/tables/distribution_centers",
+  "tableReference": {
+    "projectId": "bigquery-public-data",
+    "datasetId": "thelook_ecommerce",
+    "tableId": "distribution_centers"
+  },
+  "description": "The Look fictitious e-commerce dataset: distribution_centers table",
+  "schema": {
+    "fields": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "name",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "latitude",
+        "type": "FLOAT",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "longitude",
+        "type": "FLOAT",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "distribution_center_geom",
+        "type": "GEOGRAPHY"
+      }
+    ]
+  },
+  "numBytes": "809",
+  "numLongTermBytes": "0",
+  "numRows": "10",
+  "creationTime": "1645833123281",
+  "lastModifiedTime": "1775962729228",
+  "type": "TABLE",
+  "location": "US",
+  "numTimeTravelPhysicalBytes": "33991",
+  "numTotalLogicalBytes": "809",
+  "numActiveLogicalBytes": "809",
+  "numLongTermLogicalBytes": "0",
+  "numTotalPhysicalBytes": "36920",
+  "numActivePhysicalBytes": "36920",
+  "numLongTermPhysicalBytes": "0",
+  "numCurrentPhysicalBytes": "2929"
+}

@@ -1,0 +1,86 @@
+{
+  "kind": "bigquery#table",
+  "etag": "KoGk926teGSbG5kjfaS9XQ==",
+  "id": "bigquery-public-data:thelook_ecommerce.order_items",
+  "selfLink": "https://bigquery.googleapis.com/bigquery/v2/projects/bigquery-public-data/datasets/thelook_ecommerce/tables/order_items",
+  "tableReference": {
+    "projectId": "bigquery-public-data",
+    "datasetId": "thelook_ecommerce",
+    "tableId": "order_items"
+  },
+  "description": "Programatically generated order items for The Look fictitious e-commerce store",
+  "schema": {
+    "fields": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "order_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "product_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "inventory_item_id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "status",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "shipped_at",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "delivered_at",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "returned_at",
+        "type": "TIMESTAMP",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "sale_price",
+        "type": "FLOAT",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "numBytes": "13580453",
+  "numLongTermBytes": "0",
+  "numRows": "180920",
+  "creationTime": "1645833123328",
+  "lastModifiedTime": "1775962705736",
+  "type": "TABLE",
+  "location": "US",
+  "numTimeTravelPhysicalBytes": "32295560",
+  "numTotalLogicalBytes": "13580453",
+  "numActiveLogicalBytes": "13580453",
+  "numLongTermLogicalBytes": "0",
+  "numTotalPhysicalBytes": "36902261",
+  "numActivePhysicalBytes": "36902261",
+  "numLongTermPhysicalBytes": "0",
+  "numCurrentPhysicalBytes": "4606701"
+}
