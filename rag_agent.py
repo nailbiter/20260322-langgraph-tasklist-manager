@@ -10,9 +10,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# langchain-google-genai reads GOOGLE_API_KEY; alias GEMINI_API_KEY if needed
-if "GOOGLE_API_KEY" not in os.environ and "GEMINI_API_KEY" in os.environ:
-    os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
+# Always use GEMINI_API_KEY as the authoritative key.
+# Without this, langchain-google-genai may fall back to Application Default
+# Credentials (ADC / gcloud), which fails on machines without gcloud set up.
+GOOGLE_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+if not GOOGLE_API_KEY:
+    raise EnvironmentError("Set GEMINI_API_KEY or GOOGLE_API_KEY in .env")
+os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
 
 # ---------------------------------------------------------------------------
 # 1. Preprocess documents
@@ -30,7 +34,7 @@ docs = [WebBaseLoader(url).load() for url in urls]
 docs_list = [item for sublist in docs for item in sublist]
 
 text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-    chunk_size=100, chunk_overlap=50
+    chunk_size=500, chunk_overlap=100
 )
 doc_splits = text_splitter.split_documents(docs_list)
 
@@ -67,13 +71,22 @@ from langchain_google_genai import ChatGoogleGenerativeAI  # embeddings use loca
 from langchain_core.messages import HumanMessage
 from langgraph.graph import MessagesState
 
-response_model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
-grader_model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+response_model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0, google_api_key=GOOGLE_API_KEY)
+grader_model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0, google_api_key=GOOGLE_API_KEY)
+
+
+SYSTEM_PROMPT = (
+    "You are an assistant that answers questions about Lilian Weng's blog posts. "
+    "You have access to a retrieval tool. "
+    "Always use the retrieve_blog_posts tool to look up information before answering — "
+    "do not rely on your training data."
+)
 
 
 def generate_query_or_respond(state: MessagesState):
     """Call the model to generate a response or decide to retrieve."""
-    response = response_model.bind_tools([retriever_tool]).invoke(state["messages"])
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + state["messages"]
+    response = response_model.bind_tools([retriever_tool]).invoke(messages)
     return {"messages": [response]}
 
 
